@@ -19,7 +19,8 @@ cost = ilqr.TrackingCost(x_goal, Q, R, Qf)
 
 prob = ilqr.ilqrProblem(dynamics, cost)
 ilqrx = ilqr.iLQR(prob, N)
-us_init = np.random.randn(N, ilqrx.nU)*0.0001
+#us_init = np.random.randn(N, ilqrx.nU)*0.0001
+us_init = np.zeros((N, ilqrx.nU))
 X, _, J = ilqrx.run_ilqr(x, us_init)
 
 plt.clf()

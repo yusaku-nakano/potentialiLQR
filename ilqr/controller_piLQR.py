@@ -17,28 +17,12 @@ class iLQR:
                        'max_regu' : 10000,
                        'min_regu' : 0.001}
         self.N = N
+        self.cost = self.problem.game_cost
+        self.f = self.problem.dynamics
+        selfnX = self.problem.dynamics.nX
+        self.nU = self.problem.dynamics.nU
+        self.dt = self.problem.dynamics.dt
 
-    @property
-    def cost(self):
-        return self.problem.game_cost
-
-    @property
-    def f(self):
-        return self.problem.dynamics
-
-    @property
-    def nX(self):
-        return self.problem.dynamics.nX
-
-    @property
-    def nU(self):
-        return self.problem.dynamics.nU
-
-    @property
-    def dt(self):
-        return self.problem.dynamics.dt
-
-    #@numba.njit
     def rollout(self, x0, U):
         '''
         Rollout with initial state and control trajectory
@@ -52,7 +36,6 @@ class iLQR:
         J += self.cost(X[-1], np.zeros((self.nU)), terminal=True).item()
         return X, J
     
-    #@numba.njit
     def forward_pass(self, X, U, ks, Ks, alpha):
         '''
         Forward Pass
@@ -71,8 +54,6 @@ class iLQR:
 
         return X_next, U_next, J_new
 
-
-    #@numba.njit
     def backward_pass(self, X, U, regu):
         '''
         Backward Pass
@@ -114,18 +95,17 @@ class iLQR:
 
         return ks, Ks, delta_V
     
-    #@numba.njit
     def run_ilqr(self, x0, u_init, max_iters=50, early_stop = True,
-                alphas = 0.5**np.arange(8), regu_init = 20, max_regu = 10000, min_regu = 0.001):
+                alphas = 0.5**np.arange(8), regu_init = 20, max_regu = 10000, min_regu = 0.001, tol = 1e-3):
         '''
         iLQR main loop
         '''
         U = u_init
         regu = regu_init
         # First forward rollout
-        X, J_old = self.rollout(x0, U)
+        X, J_star = self.rollout(x0, U)
         # cost trace
-        J_trace = [J_old]
+        J_trace = [J_star]
 
         # Run main loop
         for it in range(max_iters):
@@ -136,19 +116,20 @@ class iLQR:
 
             # Backtracking line search
             for alpha in alphas:
-                X_next, U_next, J_new = self.forward_pass(X, U, ks, Ks, alpha)
-                if J_old - J_new > 0:
+                X_next, U_next, J = self.forward_pass(X, U, ks, Ks, alpha)
+                if J < J_star:
                     # Accept new trajectories and lower regularization
-                    J_old = J_new
+                    J_star = J
                     X = X_next
                     U = U_next
                     regu *= 0.7
+                    accept = True
                     break
-                else:
-                    # Reject new trajectories and increase regularization
-                    regu *= 2.0
+            else:
+                # Reject new trajectories and increase regularization
+                regu *= 2.0
 
-            J_trace.append(J_old)
+            J_trace.append(J_star)
             regu = min(max(regu, min_regu), max_regu)
 
         return X, U, J_trace
@@ -162,10 +143,7 @@ class RHC:
         self.x = x0
         self.controller = controller
         self.stepsize = stepsize
-    
-    @property
-    def N(self):
-        return self.controller.N
+        self.N = self.controller.N
     
     def solve(self, Uinit, J_converge=1.0, **kwargs):
         i = 0

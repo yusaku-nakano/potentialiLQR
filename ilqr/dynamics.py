@@ -62,14 +62,6 @@ def linearize_unicycle_4d(x, u, dt):
 
     return A, B
 
-# Common validation function
-def _common_validation(model, x, u):
-    if not isinstance(model, Model):
-        raise ValueError("Invalid model type.")
-
-    if not x.flags["C_CONTIGUOUS"] or not u.flags["C_CONTIGUOUS"]:
-        raise ValueError("Inputs must be C-contiguous.")
-
 def rk4_integration(f, x0, u, h, dh=None):
     """Classic Runge-Kutta Method with sub-integration"""
 
@@ -100,12 +92,10 @@ def rk4(f, dt, x, u):
     return x + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
 
 def integrate(x, u, dt, model):
-    _common_validation(model, x, u)
     return rk4(lambda x, u: f(x, u, model), dt, x, u)
 
 # Linearization
 def linearize(x, u, dt, model):
-    _common_validation(model, x, u)
 
     nx = x.shape[0]
     nu = u.shape[0]
@@ -121,7 +111,6 @@ def linearize(x, u, dt, model):
 
 # Dynamics Function Dispatcher
 def f(x, u, model):
-    _common_validation(model, x, u)
 
     if model == Model.Unicycle4D:
         return f_unicycle_4d(x, u)
@@ -146,10 +135,7 @@ class DynamicalModel(abc.ABC):
 
     def __call__(self, x, u):
         """Zero-order hold to integrate continuous dynamics f"""
-
-        # return forward_euler_integration(self.f, x, u, self.dt)
         return rk4_integration(self.f, x, u, self.dt, self.dt)
-        # return scipy_integration(self.f, x, u, self.dt, method="RK23")
 
     @classmethod
     def _reset_ids(cls):
@@ -157,16 +143,15 @@ class DynamicalModel(abc.ABC):
 
     def __repr__(self):
         return f"{type(self).__name__}(n_x: {self.n_x}, n_u: {self.n_u}, id: {self.id})"
-    
-class CppModel(DynamicalModel):
-    """Implementation using a C++ dynamics library via Cython"""
 
+class UnicycleDynamics4D(DynamicalModel):
     def __init__(self, dt, *args, **kwargs):
-        super().__init__(dt, *args, **kwargs)
+        super().__init__(4, 2, dt,*args, **kwargs)
+        self.model = Model.Unicycle4D
 
     def __call__(self, x, u):
         return integrate(x, u, self.dt, self.model)
-
+    
     def f(self, x, u):
         return f(x, u, self.model)
 
@@ -243,8 +228,3 @@ class MultiDynamicalModel(DynamicalModel):
     def __repr__(self):
         sub_reprs = ",\n\t".join([repr(submodel) for submodel in self.submodels])
         return f"MultiDynamicalModel(\n\t{sub_reprs}\n)"
-
-class UnicycleDynamics4D(CppModel):
-    def __init__(self, dt, *args, **kwargs):
-        super().__init__(4, 2, dt,*args, **kwargs)
-        self.model = Model.Unicycle4D
