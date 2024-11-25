@@ -167,8 +167,8 @@ class MultiDynamicalModel(DynamicalModel):
         self.submodels = submodels
         self.n_players = len(submodels)
 
-        self.x_dims = [submodel.n_x for submodel in submodels]
-        self.u_dims = [submodel.n_u for submodel in submodels]
+        self.x_dims = [submodel.nX for submodel in submodels]
+        self.u_dims = [submodel.nU for submodel in submodels]
         self.ids = [submodel.id for submodel in submodels]
 
         super().__init__(sum(self.x_dims), sum(self.u_dims), submodels[0].dt, -1)

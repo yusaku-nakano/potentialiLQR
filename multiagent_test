@@ -57,7 +57,7 @@ game_cost = ilqr.GameCost(goal_costs, prox_cost)
 problem = ilqr.ilqrProblem(dynamics, game_cost)
 solver = ilqr.iLQR(problem, N)
 us_init = np.random.randn(N, solver.nU)*0.0001
-X, _, J = solver.run_ilqr(x0, tol=tol, t_kill=None)
+X, _, J_trace, J = solver.run_ilqr(x0, us_init, tol=tol)
 
 plt.clf()
 plot_solve(X, J, xf.T, x_dims, True, n_d)

@@ -139,7 +139,7 @@ def plot_solve(X, J, x_goal, x_dims=None, color_agents=False, n_d=2, ax=None):
             
 
     plt.margins(0.1)
-    #plt.title(f"Final Cost: {J:.3g}")
+    plt.title(f"Final Cost: {J:f}")
     plt.draw()
 
 

@@ -1,8 +1,12 @@
-import numba
 import numpy as np
-
+from time import perf_counter
 
 class iLQR:
+    # Initial regularization scaling
+    REGU_DELTA_INIT = 2.0
+    # Minimum and maximum regularization on hessian in backward pass
+    REGU_MIN = 1e-6
+    REGU_MAX = 1e3
 
     def __init__(self, problem, N=10):
         '''
@@ -19,16 +23,18 @@ class iLQR:
         self.N = N
         self.cost = self.problem.game_cost
         self.f = self.problem.dynamics
-        selfnX = self.problem.dynamics.nX
+        self.nX = self.problem.dynamics.nX
         self.nU = self.problem.dynamics.nU
         self.dt = self.problem.dynamics.dt
+        self.regu = 1.0
+        self.regu_delta = 2.0
 
     def rollout(self, x0, U):
         '''
         Rollout with initial state and control trajectory
         '''
         X = np.empty((U.shape[0] + 1, x0.shape[0]))
-        X[0] = x0
+        X[0] = x0.flatten()
         J = 0
         for t in range(U.shape[0]):
             X[t + 1] = self.f(X[t], U[t])
@@ -41,14 +47,18 @@ class iLQR:
         Forward Pass
         '''
         X_next = np.empty(X.shape)
-        U_next = U + alpha*ks
+        U_next = np.empty(U.shape)
         J_new = 0.0
 
         X_next[0] = X[0]
         
         for t in range(U.shape[0]):
-            U_next[t] += Ks[t].dot(X_next[t] - X[t])
+            delta_x = X_next[t] - X[t]
+            delta_u = Ks[t] @ delta_x + alpha * ks[t]
+
+            U_next[t] = U[t] + delta_u
             X_next[t + 1] = self.f(X_next[t], U_next[t])
+
             J_new += self.cost(X_next[t], U_next[t]).item()
         J_new += self.cost(X_next[-1], np.zeros((self.nU)), terminal=True).item()
 
@@ -80,10 +90,9 @@ class iLQR:
             f_u_dot_regu = f_u.T@regu_I
             Q_ux_regu = Q_ux + f_u_dot_regu@f_x
             Q_uu_regu = Q_uu + f_u_dot_regu@f_u
-            Q_uu_inv = np.linalg.inv(Q_uu_regu)
 
-            k = -Q_uu_inv@Q_u
-            K = -Q_uu_inv@Q_ux_regu
+            k = -np.linalg.solve(Q_uu_regu,Q_u)
+            K = -np.linalg.solve(Q_uu_regu,Q_ux_regu)
             ks[t] = k 
             Ks[t] = K
 
@@ -94,46 +103,70 @@ class iLQR:
             delta_V += Q_u.T@k + 0.5*k.T@Q_uu@k
 
         return ks, Ks, delta_V
-    
+
     def run_ilqr(self, x0, u_init, max_iters=50, early_stop = True,
-                alphas = 0.5**np.arange(8), regu_init = 20, max_regu = 10000, min_regu = 0.001, tol = 1e-3):
+                alphas = 0.5**np.arange(8), tol = 1e-3):
         '''
         iLQR main loop
         '''
         U = u_init
-        regu = regu_init
+
+        self.regu = 1.0
+        self.regu_delta = 2.0
+
+        x0 = x0.reshape(-1, 1)
+
+        is_converged = False
         # First forward rollout
         X, J_star = self.rollout(x0, U)
         # cost trace
         J_trace = [J_star]
 
+        print(f"0/{max_iters}\tJ: {J_star:g}")
         # Run main loop
         for it in range(max_iters):
-            ks, Ks, exp_cost_redu = self.backward_pass(X, U, regu)
+            accept = False
+            ks, Ks, exp_cost_redu = self.backward_pass(X, U, self.regu)
 
             # Early termination if improvement is small
-            if it > 3 and early_stop and np.abs(exp_cost_redu) < 1e-5: break
+            if it > 3 and early_stop and np.abs(exp_cost_redu) < 1e-5: 
+                break
 
             # Backtracking line search
             for alpha in alphas:
                 X_next, U_next, J = self.forward_pass(X, U, ks, Ks, alpha)
                 if J < J_star:
+                    if abs((J_star - J) / J_star) < tol:
+                        is_converged = True
                     # Accept new trajectories and lower regularization
                     J_star = J
                     X = X_next
                     U = U_next
-                    regu *= 0.7
+                    # Decrease regularization parameter when the forward pass is successful
+                    self.regu_delta = min(1.0, self.regu_delta) / self.REGU_DELTA_INIT
+                    self.regu *= self.regu_delta
+                    if self.regu <= self.REGU_MIN:
+                        self.regu = 0.0
+
                     accept = True
                     break
-            else:
-                # Reject new trajectories and increase regularization
-                regu *= 2.0
+            if not accept:
+                # Increase regularization parameter when the forward pass fails (e.g. new trajectory does not reduce cost)
+                self.regu_delta = max(1.0, self.regu_delta) * self.REGU_DELTA_INIT
+                self.regu = max(self.REGU_MIN, self.regu * self.regu_delta)
+                if self.regu >= self.REGU_MAX:
+                    print("Exceeded max regularization term...")
+                    break
+            if is_converged: 
+                break
 
             J_trace.append(J_star)
-            regu = min(max(regu, min_regu), max_regu)
 
-        return X, U, J_trace
+            print(
+                    f"{it+1}/{max_iters}\tJ: {J_star:g}\tregu: {self.regu:g}\tregu_delta: {self.regu_delta:g}"
+            )
 
+        return X, U, J_trace, J
 
 class RHC:
     """
