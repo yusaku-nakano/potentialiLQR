@@ -4,14 +4,7 @@ import numpy as np
 from .utils import split_agents_gen, uniform_block_diag
 
 class Model(Enum):
-    DoubleInt4D = 0
-    DoubleInt6D = auto()
-    Car3D = auto()
     Unicycle4D = auto()
-    Quadcopter6D = auto()
-    Human6D = auto()
-    HumanLin6D = auto()
-    Quadcopter12D = auto()
 
 def f_unicycle_4d(x, u):
     """
