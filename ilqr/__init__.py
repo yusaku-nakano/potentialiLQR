@@ -12,12 +12,11 @@ from .dynamics import (
     DynamicalModel,
     MultiDynamicalModel,
     UnicycleDynamics4D,
+    BicycleDynamics5D,
 )
-from .problem import _reset_ids, ilqrProblem
 from .visualize import (
     eyeball_scenario,
     make_trajectory_gif,
-    plot_interaction_graph,
     plot_pairwise_distances,
     plot_solve,
     set_bounds,

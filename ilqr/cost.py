@@ -81,6 +81,9 @@ class TrackingCost(Cost):
         return (x - self.xf) @ self.Qf @ (x - self.xf).T
 
     def quadraticize(self, x, u, terminal=False):
+        """
+        Computes Jacobians and Hessians of operating point w.r.t. state and controls
+        """
         x = x.flatten()
         u = u.flatten()
 

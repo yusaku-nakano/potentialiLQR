@@ -53,9 +53,7 @@ goal_costs = [
 ]
 prox_cost = ilqr.ProximityCost(x_dims, radius, n_dims)
 game_cost = ilqr.GameCost(goal_costs, prox_cost)
-
-problem = ilqr.ilqrProblem(dynamics, game_cost)
-solver = ilqr.iLQR(problem, N)
+solver = ilqr.iLQR(dynamics, game_cost, N)
 us_init = np.random.randn(N, solver.nU)*0.0001
 X, _, J_trace, J = solver.run_ilqr(x0, us_init, tol=tol)
 

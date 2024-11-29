@@ -8,27 +8,23 @@ class iLQR:
     REGU_MIN = 1e-6
     REGU_MAX = 1e3
 
-    def __init__(self, problem, N=10):
-        '''
-           iterative Linear Quadratic Regulator
-           Args:
-             dynamics: dynamics container
-             cost: cost container
-        '''
-        self.problem = problem
-        self.params = {'alphas'  : 0.5**np.arange(8), #line search candidates
-                       'regu_init': 20,    #initial regularization factor
-                       'max_regu' : 10000,
-                       'min_regu' : 0.001}
+    def __init__(self, dynamics, cost, N=10):
+        """
+        iterative Linear Quadratic Regulator
+
+        Args:
+          dynamics: dynamics container
+          cost: cost container
+        """
+        self.f = dynamics
+        self.cost = cost
         self.N = N
-        self.cost = self.problem.game_cost
-        self.f = self.problem.dynamics
-        self.nX = self.problem.dynamics.nX
-        self.nU = self.problem.dynamics.nU
-        self.dt = self.problem.dynamics.dt
+        self.nX = self.f.nX
+        self.nU = self.f.nU
+        self.dt = self.f.dt
         self.regu = 1.0
         self.regu_delta = 2.0
-
+    
     def rollout(self, x0, U):
         '''
         Rollout with initial state and control trajectory
@@ -41,7 +37,7 @@ class iLQR:
             J += self.cost(X[t], U[t]).item()
         J += self.cost(X[-1], np.zeros((self.nU)), terminal=True).item()
         return X, J
-    
+
     def forward_pass(self, X, U, ks, Ks, alpha):
         '''
         Forward Pass

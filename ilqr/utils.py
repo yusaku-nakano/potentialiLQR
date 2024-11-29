@@ -146,7 +146,14 @@ def split_agents(Z, z_dims):
     return np.split(np.atleast_2d(Z), np.cumsum(z_dims[:-1]), axis=1)
 
 def split_agents_gen(z, z_dims):
-    """Generator version of ``split_agents``"""
+    """
+    Generator version of ``split_agents``
+    
+    z: flat array containing concatendated data for multiple agents
+    z_dims: a list where the first element (z_dims[0]) specifies the dimensionality of each agent's data
+
+    slices out a chunk of dim elements from z corresponding to the ith agent's data and yields it
+    """
     dim = z_dims[0]
     for i in range(len(z_dims)):
         yield z[i * dim : (i + 1) * dim]

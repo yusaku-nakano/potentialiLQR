@@ -15,8 +15,6 @@ plt.rcParams.update(
     {
         "axes.grid": False,
         "figure.constrained_layout.use": True,
-        # "text.usetex": True,
-        # "font.family": "serif",
         "font.serif": ["Palatino"],
         "ps.distiller.res": 8000,
     }
@@ -24,11 +22,9 @@ plt.rcParams.update(
 
 
 def set_bounds(xydata, ax=None, zoom=0.1):
-    """Set the axis on plt.gca() by some margin beyond the data, default 10% margin
-
-    Reference:
-    https://github.com/zjwilliams20/pocketknives/blob/main/pocketknives/python/graphics.py
-
+    """
+    Adjusts the axis limits of a plot based on the given data (xydata) with an optional zoom margin.
+    Useful for dynamically setting plot bounds to ensure all data points are visible.
     """
 
     xydata = np.atleast_2d(xydata)
@@ -45,50 +41,16 @@ def set_bounds(xydata, ax=None, zoom=0.1):
 
 
 def nchoosek(n, k):
-    """n! / (k! * (n - k)!)
+    """
+    Computes combinations (n choose k) using the formula:
 
-    Parameters
-    ----------
-    n, k : int
-
-    Returns
-    -------
-    int
-
-    Reference:
-    https://github.com/zjwilliams20/pocketknives/blob/main/pocketknives/python/numerical.py
-
+    C(n,k) = n! / (k! * (n-k)!)
     """
 
     k = min(k, n - k)
     num = reduce(mul, range(n, n - k, -1), 1)
     denom = reduce(mul, range(1, k + 1), 1)
     return num // denom
-
-
-def plot_interaction_graph(graph):
-    """Visualize the interaction graph using networkx"""
-
-    import networkx as nx
-
-    plt.clf()
-
-    # Remove self-looping nodes.
-    graph = {k: [vi for vi in v if vi != k] for k, v in graph.items()}
-
-    G = nx.Graph(graph)
-
-    options = {
-        "font_size": 10,
-        "node_size": 600,
-        "node_color": plt.cm.Set3.colors[: len(graph)],
-        "edgecolors": "black",
-    }
-
-    nx.draw_networkx(G, nx.spring_layout(G, k=0.5), **options)
-    plt.margins(0.1)
-    plt.draw()
-
 
 def plot_solve(X, J, x_goal, x_dims=None, color_agents=False, n_d=2, ax=None):
     """Plot the resultant trajectory on plt.gcf()"""
@@ -144,9 +106,14 @@ def plot_solve(X, J, x_goal, x_dims=None, color_agents=False, n_d=2, ax=None):
 
 
 def plot_pairwise_distances(X, x_dims, n_dims, radius):
-    """Render all-pairwise distances in the trajectory"""
+    """
+    Render all-pairwise distances in the trajectory
+    """
 
+    # Get current axis
     ax = plt.gca()
+
+    # Plot all pairwise distances
     ax.plot(compute_pairwise_distance(X, x_dims, n_dims[1]))
     ax.hlines(radius, *plt.xlim(), "r", ls="--", label="$d_{prox}$")
     ax.set_title("Inter-Agent Distances")
@@ -157,11 +124,18 @@ def plot_pairwise_distances(X, x_dims, n_dims, radius):
 
 
 def _setup_gif(axes, X, xf, x_dims, radius, distances):
-
+    
+    # axes: tuple of two matplotlib axes objects
+    # First axis: used to plot trajectories of agents
+    # Second axis: used to plot pairwise distances between agents
     ax1, ax2 = axes
     n_agents = len(x_dims)
+    # handles1: creates list of handles to store the plot elements for the trajectories of the agents.
     handles1 = []
+
+    # Loops over agents and creates plot element for each agent's trajectory
     for _, c in zip(range(n_agents), cycle(plt.cm.tab20.colors)):
+        # 
         handles1.append(
             (
                 ax1.plot(0, c=c, marker="o", markersize=4)[0],
@@ -172,7 +146,8 @@ def _setup_gif(axes, X, xf, x_dims, radius, distances):
                 ),
             )
         )
-
+    
+    # Loops over the agents and plots the final state of each agent as "x"
     for xg in split_agents(xf, x_dims):
         ax1.scatter(xg[0, 0], xg[0, 1], c="r", marker="x", zorder=10)
 
@@ -182,6 +157,8 @@ def _setup_gif(axes, X, xf, x_dims, radius, distances):
     plt.draw()
 
     handles2 = []
+    # Calculating number of ways to choose 2 agents from group of n_agents agents
+    # Want to plot the distances between all pair of agents
     n_pairs = nchoosek(n_agents, 2)
     for _, c in zip(range(n_pairs), cycle(plt.cm.tab20.colors)):
         handles2.append(ax2.plot(0, c=c)[0])

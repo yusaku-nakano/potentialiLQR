@@ -5,6 +5,7 @@ from .utils import split_agents_gen, uniform_block_diag
 
 class Model(Enum):
     Unicycle4D = auto()
+    Bicycle5D = auto()
 
 def f_unicycle_4d(x, u):
     """
@@ -55,8 +56,83 @@ def linearize_unicycle_4d(x, u, dt):
 
     return A, B
 
+def f_bicycle_5d(x, u, L=2.5):
+    """
+    Compute the state derivatives for a kinematic bicycle model.
+    x: State vector [px, py, v, psi, delta]
+    u: Control input [a, delta_dot]
+    L: Wheelbase of the vehicle
+    Returns:
+        x_dot: Derivative of state vector
+    """
+    px, py, v, psi, delta = x
+    a, delta_dot = u
+
+    x_dot = np.zeros_like(x)
+    x_dot[0] = v * np.cos(psi)              # dx/dt
+    x_dot[1] = v * np.sin(psi)              # dy/dt
+    x_dot[2] = a                            # dv/dt
+    x_dot[3] = v / L * np.tan(delta)        # dpsi/dt
+    x_dot[4] = delta_dot                    # ddelta/dt
+
+    return x_dot
+
+
+def linearize_bicycle_5d(x, u, dt, L=2.5):
+    """
+    Linearize the dynamics of a kinematic bicycle model around the given state and input.
+    x: State vector [px, py, v, psi, delta]
+    u: Control input [a, delta_dot]
+    dt: Time step
+    L: Wheelbase of the vehicle
+    Returns:
+        A: State transition matrix
+        B: Control input matrix
+    """
+    px, py, v, psi, delta = x
+    a, delta_dot = u
+
+    # Linearized state transition matrix A
+    A = np.zeros((5, 5))
+    A[0, 2] = np.cos(psi)            # ∂(dx/dt) / ∂v
+    A[0, 3] = -v * np.sin(psi)       # ∂(dx/dt) / ∂psi
+    A[1, 2] = np.sin(psi)            # ∂(dy/dt) / ∂v
+    A[1, 3] = v * np.cos(psi)        # ∂(dy/dt) / ∂psi
+    A[3, 2] = 1 / L * np.tan(delta)  # ∂(dpsi/dt) / ∂v
+    A[3, 4] = v / (L * np.cos(delta)**2)  # ∂(dpsi/dt) / ∂delta
+
+    # Linearized control input matrix B
+    B = np.zeros((5, 2))
+    B[2, 0] = 1                     # ∂(dv/dt) / ∂a
+    B[4, 1] = 1                     # ∂(ddelta/dt) / ∂delta_dot
+
+    # Apply Euler discretization
+    A = np.eye(5) + dt * A
+    B = dt * B
+
+    return A, B
+
 def rk4_integration(f, x0, u, h, dh=None):
-    """Classic Runge-Kutta Method with sub-integration"""
+    """
+    Implementation of the Fourth-order Runge-Kutta (RK4) method
+    for numerical integration of ODEs.
+
+    Performs integration over a time interval using substeps, 
+    allowing finer control over the integration process.
+
+    Implementation:
+    - Integrates over a total time interval "h", splitting it into smaller steps "dh".
+
+    Args:
+    - f: dynamics function defining the ODE
+    - x0: initial state
+    - u: control input
+    - h: total integration time
+    - dh: (optional) substep size for finer integration
+
+    Returns: 
+    - x: final state after integrating over the total time interval h
+    """
 
     if not dh:
         dh = h
@@ -78,6 +154,9 @@ def rk4_integration(f, x0, u, h, dh=None):
     return x
     
 def rk4(f, dt, x, u):
+    """
+    RK4 for a single step over a fixed timestep dt
+    """
     k1 = f(x, u)
     k2 = f(x + dt / 2 * k1, u)
     k3 = f(x + dt / 2 * k2, u)
@@ -97,6 +176,8 @@ def linearize(x, u, dt, model):
 
     if model == Model.Unicycle4D:
         A, B = linearize_unicycle_4d(x, u, dt)
+    elif model == Model.Bicycle5D:
+        A, B = linearize_bicycle_5d(x, u, dt)
     else:
         raise ValueError("Unsupported model.")
 
@@ -107,6 +188,8 @@ def f(x, u, model):
 
     if model == Model.Unicycle4D:
         return f_unicycle_4d(x, u)
+    elif model == Model.Bicycle5D:
+        return f_bicycle_5d(x, u)
     else:
         raise ValueError("Unsupported model.")
 
@@ -150,6 +233,28 @@ class UnicycleDynamics4D(DynamicalModel):
 
     def linearize(self, x, u):
         return linearize(x, u, self.dt, self.model)
+    
+class BicycleDynamics5D(DynamicalModel):
+    def __init__(self, dt, wheelbase, *args, **kwargs):
+        """
+        Initialize the kinematic bicycle model.
+        
+        Args:
+            dt: Time step for integration.
+            wheelbase: Distance between the front and rear axles (L).
+        """
+        super().__init__(5, 2, dt, *args, **kwargs)  # 5 states, 2 control inputs
+        self.model = Model.Bicycle5D  # Add this to your `Model` Enum
+        self.wheelbase = wheelbase  # Wheelbase of the vehicle
+
+    def __call__(self, x, u):
+        return integrate(x, u, self.dt, self.model)
+
+    def f(self, x, u):
+        return f(x, u, self.model)
+
+    def linearize(self, x, u):
+        return linearize(x, u, self.dt, self.model)
 
 class MultiDynamicalModel(DynamicalModel):
     """Encompasses the dynamical simulation and linearization for a collection of
@@ -179,9 +284,6 @@ class MultiDynamicalModel(DynamicalModel):
 
     def __call__(self, x, u):
         """Zero-order hold to integrate continuous dynamics f"""
-
-        # return forward_euler_integration(self.f, x, u, self.dt)
-        # return rk4_integration(self.f, x, u, self.dt, self.dt)
         xn = np.zeros_like(x)
         nx = self.x_dims[0]
         nu = self.u_dims[0]
